@@ -8,7 +8,7 @@ class WordStatMachine(object):
     '''basic statistics on words in a collection of docs:
     affinity, tf-idf, frequency and share
     '''
-    STOP_LIST = set(
+    STOP_LIST_RU = set(
         # '''хорошо, лучше, никогда''' +
         '''и в во не что он на я с c со как а то все она так его но да
         ты к у же вы за бы по только ее мне было вот от меня еще нет
@@ -22,6 +22,56 @@ class WordStatMachine(object):
         свою этой перед иногда чуть том нельзя такой им более
         всегда конечно всю между это ru'''.split()
     )
+    STOP_LIST_EN = {
+        'a', 'about', 'above', 'above', 'across', 'after', 'afterwards',
+        'again', 'against', 'all', 'almost', 'alone', 'along', 'already',
+        'also', 'although', 'always', 'am', 'among', 'amongst', 'amoungst',
+        'amount', 'an', 'and', 'another', 'any', 'anyhow', 'anyone',
+        'anything', 'anyway', 'anywhere', 'are', 'around', 'as', 'at', 'back',
+        'be', 'became', 'because', 'become', 'becomes', 'becoming', 'been',
+        'before', 'beforehand', 'behind', 'being', 'below', 'beside',
+        'besides', 'between', 'beyond', 'bill', 'both', 'bottom', 'but',
+        'by', 'call', 'can', 'cannot', 'cant', 'co', 'con', 'could', 'couldnt',
+        'cry', 'de', 'describe', 'detail', 'do', 'done', 'down', 'due',
+        'during', 'each', 'eg', 'eight', 'either', 'eleven', 'else',
+        'elsewhere', 'empty', 'enough', 'etc', 'even', 'ever', 'every',
+        'everyone', 'everything', 'everywhere', 'except', 'few', 'fifteen',
+        'fify', 'fill', 'find', 'fire', 'first', 'five', 'for', 'former',
+        'formerly', 'forty', 'found', 'four', 'from', 'front', 'full',
+        'further', 'get', 'give', 'go', 'had', 'has', 'hasnt', 'have',
+        'he', 'hence', 'her', 'here', 'hereafter', 'hereby', 'herein',
+        'hereupon', 'hers', 'herself', 'him', 'himself', 'his', 'how',
+        'however', 'hundred', 'ie', 'if', 'in', 'inc', 'indeed', 'interest',
+        'into', 'is', 'it', 'its', 'itself', 'keep', 'last', 'latter',
+        'latterly', 'least', 'less', 'ltd', 'made', 'many', 'may', 'me',
+        'meanwhile', 'might', 'mill', 'mine', 'more', 'moreover', 'most',
+        'mostly', 'move', 'much', 'must', 'my', 'myself', 'name', 'namely',
+        'neither', 'never', 'nevertheless', 'next', 'nine', 'no', 'nobody',
+        'none', 'noone', 'nor', 'not', 'nothing', 'now', 'nowhere', 'of',
+        'off', 'often', 'on', 'once', 'one', 'only', 'onto', 'or', 'other',
+        'others', 'otherwise', 'our', 'ours', 'ourselves', 'out', 'over',
+        'own', 'part', 'per', 'perhaps', 'please', 'put', 'rather', 're',
+        'same', 'see', 'seem', 'seemed', 'seeming', 'seems', 'serious',
+        'several', 'she', 'should', 'show', 'side', 'since', 'sincere',
+        'six', 'sixty', 'so', 'some', 'somehow', 'someone', 'something',
+        'sometime', 'sometimes', 'somewhere', 'still', 'such', 'system',
+        'take', 'ten', 'than', 'that', 'the', 'their', 'them', 'themselves',
+        'then', 'thence', 'there', 'thereafter', 'thereby', 'therefore',
+        'therein', 'thereupon', 'these', 'they', 'thickv', 'thin', 'third',
+        'this', 'those', 'though', 'three', 'through', 'throughout', 'thru',
+        'thus', 'to', 'together', 'too', 'top', 'toward', 'towards', 'twelve',
+        'twenty', 'two', 'un', 'under', 'until', 'up', 'upon', 'us', 'very',
+        'via', 'was', 'we', 'well', 'were', 'what', 'whatever', 'when',
+        'whence', 'whenever', 'where', 'whereafter', 'whereas', 'whereby',
+        'wherein', 'whereupon', 'wherever', 'whether', 'which', 'while',
+        'whither', 'who', 'whoever', 'whole', 'whom', 'whose', 'why', 'will',
+        'with', 'within', 'without', 'would', 'yet', 'you', 'your', 'yours',
+        'yourself', 'yourselves', 'the'
+    }
+    STOP_LISTS = {
+        'ru': STOP_LIST_RU,
+        'en': STOP_LIST_EN,
+    }
 
     def __init__(self):
         self._original_docs = deque()
@@ -34,9 +84,13 @@ class WordStatMachine(object):
         self.all_words_counter = Counter([])
 
     @classmethod
-    def _sanitize(cls, doc, stop_list=None):
+    def _sanitize(cls, doc, stop_list=None, lang=None):
         '''drops words from the stop-list and non alpha-numeric words'''
-        stop_list = stop_list if stop_list is not None else cls.STOP_LIST
+        assert lang in {None} | cls.STOP_LISTS.keys(), 'wrong lang value'
+        stop_list = (
+            stop_list if stop_list is not None else cls.STOP_LIST[lang]
+            if lang is not None else cls.STOP_LIST_RU | cls.STOP_LIST_EN
+        )
         if isinstance(stop_list, str):
             stop_list = set(stop_list.split())
         elif isinstance(stop_list, list):
@@ -44,8 +98,11 @@ class WordStatMachine(object):
         doc = [word for word in doc if word not in stop_list]
         return [word for word in doc if word.isalnum()]
 
-    def add_document(self, doc, doc_name=None, sanitize=True, stop_list=None):
+    def add_document(self, doc, doc_name=None,
+                     sanitize=True, stop_list=None, sep=', '):
         '''add a new doc to the collection'''
+        if isinstance(doc, str):
+            doc = doc.split(sep)[:-1]
         if sanitize:
             doc = self._sanitize(doc, stop_list)
         doc_orig = (
@@ -73,25 +130,6 @@ class WordStatMachine(object):
             ))
         )
 
-    def count_metric(self, metric_name='aff', mode=True):
-        '''compute chosen metric, where choices are ['aff', 'tf-idf']'''
-        self.measured[metric_name] = deque()
-        if metric_name == 'tf-idf':
-            metric = self.tf_idf
-        elif metric_name == 'aff':
-            metric = self.affinity
-        else:
-            raise ValueError('Unknown metric name — {}'.format(metric_name))
-        for doc in self._original_docs:
-            doc_name, doc_words = doc
-            doc_counter = self.doc_counters[doc_name]
-            doc_len = self.doc_len[doc_name]
-            tool = partial(metric, doc_counter=doc_counter,
-                           doc_len=doc_len, mode=mode)
-            tmp_vector = [tool(word) for word in doc_words]
-            tmp_doc = (doc_name, tmp_vector)
-            self.measured[metric_name].append(tmp_doc)
-
     def affinity(self, word, doc_counter, doc_len, mode=True):
         '''affinity calc'''
         local_word_share = doc_counter[word] / doc_len
@@ -105,8 +143,31 @@ class WordStatMachine(object):
         idf = math.log2(self.docs_n / self.doc_word_counter[word])
         return tf * idf if mode else (tf * idf, doc_counter[word])
 
-    def get_top(self, n=5, metric_name='aff', treshold=0):
+    def compute_metric(self, metric_name='aff', mode=True):
+        '''compute chosen metric, where choices are ['aff', 'tf-idf']'''
+        assert metric_name in {'aff', 'tf-idf'}, (
+            'metric can be either "aff" or "tf-idf"'
+        )
+        self.measured[metric_name] = deque()
+        if metric_name == 'tf-idf':
+            metric = self.tf_idf
+        elif metric_name == 'aff':
+            metric = self.affinity
+        for doc in self._original_docs:
+            doc_name, doc_words = doc
+            doc_counter = self.doc_counters[doc_name]
+            doc_len = self.doc_len[doc_name]
+            tool = partial(metric, doc_counter=doc_counter,
+                           doc_len=doc_len, mode=mode)
+            tmp_vector = [tool(word) for word in doc_words]
+            tmp_doc = (doc_name, tmp_vector)
+            self.measured[metric_name].append(tmp_doc)
+
+    def most_characteristic_words(self, n=5, metric_name='aff', treshold=0):
         '''get top-n of words by a chosen metric for each doc'''
+        assert metric_name in {'aff', 'tf-idf'}, (
+            'metric can be either "aff" or "tf-idf"'
+        )
         top_lists = []
         for i,doc in enumerate(self._original_docs):
             n = min([len(doc[1]), n])
@@ -116,14 +177,6 @@ class WordStatMachine(object):
                 continue
             tmp = [(word, metric_doc[1][x]) for x,word in enumerate(doc[1])]
             tmp = list(set(tmp))
-            # if isinstance(tmp[0][1], tuple):
-            #     tmp = [word for word in tmp if word[1][1] >= treshold]
-
-            #     def key_function(x):
-            #         return x[1][0]
-            # else:
-            #     def key_function(x):
-            #         return x[1]
             try:
                 tmp = [word for word in tmp if word[1][1] >= treshold]
                 tmp.sort(key=lambda x: x[1][0], reverse=True)
@@ -131,3 +184,92 @@ class WordStatMachine(object):
                 tmp.sort(key=lambda x: x[1], reverse=True)
             top_lists.append((doc[0], tmp[:n]))
         return top_lists
+
+    @staticmethod
+    def _compute_distance(vector1, vector2):
+        vectors = list(zip(vector1, vector2))
+        distance = math.sqrt(
+            sum([math.pow(vs[0] - vs[1], 2) for vs in vectors])
+        )
+        return distance
+
+    def _get_base_doc(self, base_doc):
+        if isinstance(base_doc, str):
+            words_vector_words = None
+            for i, doc in self._original_docs:
+                if doc[0] == base_doc:
+                    words_vector_words = doc[1]
+                    words_vector_values = self.measured['tf-idf'][i][1]
+                    break
+            if words_vector_words is None:
+                raise ValueError('No document with name {}'.format(base_doc))
+        elif isinstance(base_doc, int):
+            words_vector_words = self._original_docs[base_doc][1][:]
+            words_vector_values = self.measured['tf-idf'][base_doc][1][:]
+        elif isinstance(base_doc[0], tuple):
+            words_vector_words, words_vector_values = map(
+                list, zip(*base_doc)
+            )
+        else:
+            raise TypeError(
+                'words_vector must be either a list of tuples, '
+                + 'an int or a string, '
+            )
+        if isinstance(words_vector_values[0], tuple):
+            words_vector_values = [ft[0] for ft in words_vector_values]
+        print(words_vector_values)
+        return words_vector_words, words_vector_values
+
+    def _get_selection(self, indices, names, words_vector_words):
+        if (indices or names) is False:
+            print('both indices and names are empty, all docs will be used')
+            selection = self.measured['tf-idf'][:]
+            selection = self._original_docs[:]
+        elif names:
+            selection = [
+                doc for doc in self.measured['tf-idf'] if doc[0] in names
+            ][:]
+            originals = [
+                doc for doc in self._original_docs if doc[0] in names
+            ][:]
+        else:
+            selection = [self.measured['tf-idf'][i] for i in indices][:]
+            originals = [self._original_docs[i] for i in indices][:]
+        if isinstance(selection[0][1][0], tuple):
+            selection = [
+                (doc[0], [ft[0] for ft in doc[1]]) for doc in selection
+            ]
+        selection_vectors = [
+            (
+                doc[0], [
+                    doc[1][originals[i][1].index(word)]
+                    if word in originals[i][1]
+                    else 0
+                    for word in words_vector_words
+                ]
+            ) for i,doc in enumerate(selection)
+        ]
+        return selection_vectors
+
+    def compare_docs(self, base_doc=[], indices=[], names=[]):
+        '''this method requires tf-idf to be computed.
+
+        compute closeness to a given base_doc [(word0, tf-idf-value0), ...]
+        if base_doc is an int or a string, it is used as an index / name
+        to find base_doc among the collection of documents.
+
+        indices or names of docs can be sent as well,
+        if not — all docs are compared.
+        '''
+        assert 'tf-idf' in self.measured, (
+            'tf-idf metric has not been computed yet'
+        )
+        assert base_doc != [], 'base_doc is not defined'
+
+        words_vector_words, words_vector_values = self._get_base_doc(base_doc)
+        selection_vectors = self._get_selection(
+            indices, names, words_vector_words
+        )
+
+        tool = partial(self._compute_distance, vector2=words_vector_values)
+        return [(doc[0], tool(doc[1])) for doc in selection_vectors]
