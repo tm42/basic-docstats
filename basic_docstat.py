@@ -165,8 +165,8 @@ class WordStatMachine(object):
 
     def most_characteristic_words(self, n=5, metric_name='aff', treshold=0):
         '''get top-n of words by a chosen metric for each doc'''
-        assert metric_name in {'aff', 'tf-idf'}, (
-            'metric can be either "aff" or "tf-idf"'
+        assert metric_name in {'aff', 'tf-idf', 'share', 'freq'}, (
+            '''metric must belong to {'aff', 'tf-idf', 'share', 'freq'}'''
         )
         top_lists = []
         for i,doc in enumerate(self._original_docs):
@@ -186,11 +186,23 @@ class WordStatMachine(object):
         return top_lists
 
     @staticmethod
-    def _compute_distance(vector1, vector2):
+    def _euclidean_distance(vector1, vector2):
         vectors = list(zip(vector1, vector2))
         distance = math.sqrt(
             sum([math.pow(vs[0] - vs[1], 2) for vs in vectors])
         )
+        return distance
+
+    @staticmethod
+    def _cosine_distance(vector1, vector2):
+        vectors = list(zip(vector1, vector2))
+        x = sum([vs[0] * vs[1] for vs in vectors])
+        s1v, s2v = (
+            math.sqrt(
+                sum(map(lambda x: math.pow(x, 2), s))
+            ) for s in [vector1, vector2]
+        )
+        distance = x / (s1v * s2v)
         return distance
 
     def _get_base_doc(self, base_doc):
@@ -251,7 +263,7 @@ class WordStatMachine(object):
         ]
         return selection_vectors
 
-    def compare_docs(self, base_doc=[], indices=[], names=[]):
+    def compare_docs(self, base_doc=[], indices=[], names=[], method='cosine'):
         '''this method requires tf-idf to be computed.
 
         compute closeness to a given base_doc [(word0, tf-idf-value0), ...]
@@ -264,6 +276,9 @@ class WordStatMachine(object):
         assert 'tf-idf' in self.measured, (
             'tf-idf metric has not been computed yet'
         )
+        assert method in {'cosine', 'euclidean'}, (
+            '''distance can be either {'cosine', 'euclidean'}'''
+        )
         assert base_doc != [], 'base_doc is not defined'
 
         words_vector_words, words_vector_values = self._get_base_doc(base_doc)
@@ -271,5 +286,10 @@ class WordStatMachine(object):
             indices, names, words_vector_words
         )
 
-        tool = partial(self._compute_distance, vector2=words_vector_values)
+        if method == 'euclidean':
+            distance_f = self._euclidean_distance
+        elif method == 'cosine':
+            distance_f = self._cosine_distance
+
+        tool = partial(distance_f, vector2=words_vector_values)
         return [(doc[0], tool(doc[1])) for doc in selection_vectors]
