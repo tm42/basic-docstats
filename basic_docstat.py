@@ -236,7 +236,7 @@ class WordStatMachine(object):
         if (indices or names) is False:
             print('both indices and names are empty, all docs will be used')
             selection = self.measured['tf-idf'][:]
-            selection = self._original_docs[:]
+            originals = self._original_docs[:]
         elif names:
             selection = [
                 doc for doc in self.measured['tf-idf'] if doc[0] in names
@@ -263,7 +263,8 @@ class WordStatMachine(object):
         ]
         return selection_vectors
 
-    def compare_docs(self, base_doc=[], indices=[], names=[], method='cosine'):
+    def compare_docs(self, base_doc=[], indices=[], names=[],
+                     distance='cosine'):
         '''this method requires tf-idf to be computed.
 
         compute closeness to a given base_doc [(word0, tf-idf-value0), ...]
@@ -273,10 +274,11 @@ class WordStatMachine(object):
         indices or names of docs can be sent as well,
         if not — all docs are compared.
         '''
+
         assert 'tf-idf' in self.measured, (
             'tf-idf metric has not been computed yet'
         )
-        assert method in {'cosine', 'euclidean'}, (
+        assert distance in {'cosine', 'euclidean'}, (
             '''distance can be either {'cosine', 'euclidean'}'''
         )
         assert base_doc != [], 'base_doc is not defined'
@@ -286,9 +288,9 @@ class WordStatMachine(object):
             indices, names, words_vector_words
         )
 
-        if method == 'euclidean':
+        if distance == 'euclidean':
             distance_f = self._euclidean_distance
-        elif method == 'cosine':
+        elif distance == 'cosine':
             distance_f = self._cosine_distance
 
         tool = partial(distance_f, vector2=words_vector_values)
