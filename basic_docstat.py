@@ -75,6 +75,7 @@ class WordStatMachine(object):
 
     def __init__(self):
         self._original_docs = deque()
+        self._od_index_by_name = {}
         self.measured = {'freq': deque(), 'share': deque()}
         self.doc_counters = {}
         self.docs_n = 0
@@ -87,6 +88,7 @@ class WordStatMachine(object):
     def _sanitize(cls, doc, stop_list=None, lang=None):
         '''drops words from the stop-list and non alpha-numeric words'''
         assert lang in {None} | cls.STOP_LISTS.keys(), 'wrong lang value'
+        # TODO: more obvious logics required here
         stop_list = (
             stop_list if stop_list is not None else cls.STOP_LIST[lang]
             if lang is not None else cls.STOP_LIST_RU | cls.STOP_LIST_EN
@@ -110,6 +112,7 @@ class WordStatMachine(object):
             doc[:]
         )
         self._original_docs.append(doc_orig)
+        self._od_index_by_name[doc_orig[0]] = len(self._original_docs) - 1
         self.all_words_counter.update(doc)
         self.doc_word_counter.update(set(doc[:]))
         self.docs_n += 1
@@ -183,6 +186,7 @@ class WordStatMachine(object):
             except TypeError:
                 tmp.sort(key=lambda x: x[1], reverse=True)
             top_lists.append((doc[0], tmp[:n]))
+
         return top_lists
 
     @staticmethod
@@ -207,14 +211,12 @@ class WordStatMachine(object):
 
     def _get_base_doc(self, base_doc):
         if isinstance(base_doc, str):
-            words_vector_words = None
-            for i, doc in self._original_docs:
-                if doc[0] == base_doc:
-                    words_vector_words = doc[1]
-                    words_vector_values = self.measured['tf-idf'][i][1]
-                    break
-            if words_vector_words is None:
-                raise ValueError('No document with name {}'.format(base_doc))
+            try:
+                index = self._od_index_by_name[base_doc]
+                words_vector_words = self._original_docs[index][1][:]
+                words_vector_values = self.measured['tf-idf'][index][1][:]
+            except KeyError:
+                raise KeyError('No document with name {}'.format(base_doc))
         elif isinstance(base_doc, int):
             words_vector_words = self._original_docs[base_doc][1][:]
             words_vector_values = self.measured['tf-idf'][base_doc][1][:]
@@ -227,26 +229,31 @@ class WordStatMachine(object):
                 'words_vector must be either a list of tuples, '
                 + 'an int or a string, '
             )
+
         if isinstance(words_vector_values[0], tuple):
             words_vector_values = [ft[0] for ft in words_vector_values]
-        print(words_vector_values)
+
         return words_vector_words, words_vector_values
 
     def _get_selection(self, indices, names, words_vector_words):
-        if (indices or names) is False:
+        '''returns set of documents by indices or names.
+        if no names and no indices specified, all docs are returned
+        '''
+        if bool(indices or names) is False:
             print('both indices and names are empty, all docs will be used')
-            selection = self.measured['tf-idf'][:]
-            originals = self._original_docs[:]
+            selection = self.measured['tf-idf'].copy()
+            originals = self._original_docs.copy()
         elif names:
             selection = [
                 doc for doc in self.measured['tf-idf'] if doc[0] in names
-            ][:]
+            ].copy()
             originals = [
                 doc for doc in self._original_docs if doc[0] in names
-            ][:]
+            ].copy()
         else:
-            selection = [self.measured['tf-idf'][i] for i in indices][:]
-            originals = [self._original_docs[i] for i in indices][:]
+            selection = [self.measured['tf-idf'][i] for i in indices].copy()
+            originals = [self._original_docs[i] for i in indices].copy()
+
         if isinstance(selection[0][1][0], tuple):
             selection = [
                 (doc[0], [ft[0] for ft in doc[1]]) for doc in selection
@@ -261,10 +268,11 @@ class WordStatMachine(object):
                 ]
             ) for i,doc in enumerate(selection)
         ]
+
         return selection_vectors
 
-    def compare_docs(self, base_doc=[], indices=[], names=[],
-                     distance='cosine'):
+    def compute_distances(self, base_doc=[], indices=[], names=[],
+                          distance='cosine'):
         '''this method requires tf-idf to be computed.
 
         compute closeness to a given base_doc [(word0, tf-idf-value0), ...]
@@ -294,4 +302,6 @@ class WordStatMachine(object):
             distance_f = self._cosine_distance
 
         tool = partial(distance_f, vector2=words_vector_values)
-        return [(doc[0], tool(doc[1])) for doc in selection_vectors]
+        res = [(doc[0], tool(doc[1])) for doc in selection_vectors]
+        res.sort(key=lambda x: x[1], reverse=True)
+        return res
